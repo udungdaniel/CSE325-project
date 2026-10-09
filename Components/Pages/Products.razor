@@ -1,0 +1,517 @@
+@page "/products"
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@using System.ComponentModel.DataAnnotations
+@using System.Globalization
+@using System.Linq
+@using ThreadLine.Data
+@using ThreadLine.Models
+@inject ApplicationDbContext Db
+@inject IJSRuntime JS
+
+<PageTitle>Product Management - ThreadLine</PageTitle>
+
+<h1>Product Management</h1>
+<p>Manage clothing products, prices, and stock levels.</p>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Add New Product</h5>
+    </div>
+    <div class="card-body">
+        <EditForm Model="@newProduct" OnValidSubmit="@AddProduct">
+            <DataAnnotationsValidator />
+            <ValidationSummary />
+
+            @if (!string.IsNullOrWhiteSpace(message))
+            {
+                <div class="alert alert-info" role="alert">
+                    @message
+                </div>
+            }
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Product Name *</label>
+                    <InputText class="form-control"
+                               @bind-Value="newProduct.Name"
+                               placeholder="e.g. Men's Polo Shirt" />
+                    <ValidationMessage For="@(() => newProduct.Name)" />
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Category *</label>
+                    <InputSelect class="form-select"
+                                 @bind-Value="newProduct.Category">
+                        <option value="">Select category</option>
+                        <option value="Shirts">Shirts</option>
+                        <option value="Trousers">Trousers</option>
+                        <option value="Dresses">Dresses</option>
+                        <option value="Skirts">Skirts</option>
+                        <option value="Jackets">Jackets</option>
+                        <option value="Shoes">Shoes</option>
+                        <option value="Accessories">Accessories</option>
+                        <option value="Other">Other</option>
+                    </InputSelect>
+                    <ValidationMessage For="@(() => newProduct.Category)" />
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Size</label>
+                    <InputSelect class="form-select" @bind-Value="newProduct.Size">
+                        <option value="">Not applicable</option>
+                        <option value="XS">XS</option>
+                        <option value="S">S</option>
+                        <option value="M">M</option>
+                        <option value="L">L</option>
+                        <option value="XL">XL</option>
+                        <option value="XXL">XXL</option>
+                        <option value="Free Size">Free Size</option>
+                    </InputSelect>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Color</label>
+                    <InputText class="form-control"
+                               @bind-Value="newProduct.Color"
+                               placeholder="e.g. Black" />
+                    <ValidationMessage For="@(() => newProduct.Color)" />
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Price (₦) *</label>
+                    <InputNumber class="form-control"
+                                 @bind-Value="newProduct.Price"
+                                 step="0.01" />
+                    <ValidationMessage For="@(() => newProduct.Price)" />
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Stock Quantity *</label>
+                    <InputNumber class="form-control" @bind-Value="newProduct.StockQuantity" />
+                    <ValidationMessage For="@(() => newProduct.StockQuantity)" />
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Reorder Level *</label>
+                    <InputNumber class="form-control" @bind-Value="newProduct.ReorderLevel" />
+                    <ValidationMessage For="@(() => newProduct.ReorderLevel)" />
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary mt-3" disabled="@isSaving">
+                @(isSaving ? "Saving..." : "Save Product")
+            </button>
+        </EditForm>
+    </div>
+</div>
+
+@if (editingProduct != null)
+{
+    <div class="card mb-4 border-warning">
+        <div class="card-header">
+            <h5 class="mb-0">Edit Product</h5>
+        </div>
+        <div class="card-body">
+            <EditForm Model="@editingProduct" OnValidSubmit="@UpdateProduct">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="mb-3">
+                    <label class="form-label">Product Name</label>
+                    <InputText class="form-control" @bind-Value="editingProduct.Name" />
+                    <ValidationMessage For="@(() => editingProduct.Name)" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Category</label>
+                    <InputText class="form-control" @bind-Value="editingProduct.Category" />
+                    <ValidationMessage For="@(() => editingProduct.Category)" />
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Size</label>
+                        <InputText class="form-control" @bind-Value="editingProduct.Size" />
+                        <ValidationMessage For="@(() => editingProduct.Size)" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Color</label>
+                        <InputText class="form-control" @bind-Value="editingProduct.Color" />
+                        <ValidationMessage For="@(() => editingProduct.Color)" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Price (₦)</label>
+                        <InputNumber class="form-control"
+                                     @bind-Value="editingProduct.Price" step="0.01" />
+                        <ValidationMessage For="@(() => editingProduct.Price)" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Stock Quantity</label>
+                        <InputNumber class="form-control" @bind-Value="editingProduct.StockQuantity" />
+                        <ValidationMessage For="@(() => editingProduct.StockQuantity)" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Reorder Level</label>
+                        <InputNumber class="form-control" @bind-Value="editingProduct.ReorderLevel" />
+                        <ValidationMessage For="@(() => editingProduct.ReorderLevel)" />
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary mt-3" disabled="@isSaving">
+                    Save Changes
+                </button>
+                <button type="button" class="btn btn-secondary mt-3 ms-2"
+                        @onclick="CancelEdit">
+                    Cancel
+                </button>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<h4>Product Inventory</h4>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Search Products</label>
+                <input class="form-control"
+                       type="search"
+                       placeholder="Search by product name..."
+                       @bind="searchTerm"
+                       @bind:event="oninput" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Filter by Category</label>
+                <select class="form-select" @bind="selectedCategory">
+                    <option value="">All Categories</option>
+                    <option value="Shirts">Shirts</option>
+                    <option value="Trousers">Trousers</option>
+                    <option value="Dresses">Dresses</option>
+                    <option value="Skirts">Skirts</option>
+                    <option value="Jackets">Jackets</option>
+                    <option value="Shoes">Shoes</option>
+                    <option value="Accessories">Accessories</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Filter by Stock Status</label>
+                <select class="form-select" @bind="selectedStockStatus">
+                    <option value="">All Stock Statuses</option>
+                    <option value="InStock">In Stock</option>
+                    <option value="LowStock">Low Stock</option>
+                    <option value="OutOfStock">Out of Stock</option>
+                </select>
+            </div>
+        </div>
+        <button class="btn btn-outline-secondary btn-sm mt-3" @onclick="ClearFilters">
+            Clear Filters
+        </button>
+    </div>
+</div>
+
+@if (products == null)
+{
+    <p>Loading products...</p>
+}
+else if (FilteredProducts.Count == 0)
+{
+    <div class="alert alert-secondary">
+        No products match your search or filters.
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Size</th>
+                    <th>Color</th>
+                    <th>Price</th>
+                    <th>Stock</th>
+                    <th>Stock Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var product in FilteredProducts)
+                {
+                    <tr>
+                        <td>@product.Name</td>
+                        <td>@product.Category</td>
+                        <td>@(product.Size ?? "-")</td>
+                        <td>@(product.Color ?? "-")</td>
+                        <td>@product.Price.ToString("C", CultureInfo.GetCultureInfo("en-NG"))</td>
+                        <td>@product.StockQuantity</td>
+                        <td>
+                            @if (product.StockQuantity == 0)
+                            {
+                                <span class="badge bg-danger">Out of Stock</span>
+                            }
+                            else if (product.StockQuantity <= product.ReorderLevel)
+                            {
+                                <span class="badge bg-warning text-dark">Low Stock</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success">In Stock</span>
+                            }
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-warning me-2"
+                                    @onclick="() => StartEdit(product)">
+                                Edit
+                            </button>
+                            <button class="btn btn-sm btn-danger"
+                                    @onclick="() => DeleteProduct(product)">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<Product>? products;
+    private ProductFormModel newProduct = new();
+    private Product? editingProduct;
+    private string? message;
+    private bool isSaving;
+
+    private string searchTerm = string.Empty;
+    private string selectedCategory = string.Empty;
+    private string selectedStockStatus = string.Empty;
+
+    private List<Product> FilteredProducts =>
+        (products ?? new List<Product>())
+            .Where(p =>
+                string.IsNullOrWhiteSpace(searchTerm) ||
+                p.Name.Contains(searchTerm.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Where(p =>
+                string.IsNullOrWhiteSpace(selectedCategory) ||
+                p.Category == selectedCategory)
+            .Where(p =>
+                selectedStockStatus switch
+                {
+                    "InStock" => p.StockQuantity > p.ReorderLevel,
+                    "LowStock" => p.StockQuantity > 0 &&
+                                  p.StockQuantity <= p.ReorderLevel,
+                    "OutOfStock" => p.StockQuantity == 0,
+                    _ => true
+                })
+            .OrderBy(p => p.Name)
+            .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProducts();
+    }
+
+    private async Task LoadProducts()
+    {
+        products = await Db.Products
+            .AsNoTracking()
+            .OrderBy(p => p.Name)
+            .ToListAsync();
+    }
+
+    private void ClearFilters()
+    {
+        searchTerm = string.Empty;
+        selectedCategory = string.Empty;
+        selectedStockStatus = string.Empty;
+    }
+
+    private async Task AddProduct()
+    {
+        if (isSaving)
+            return;
+
+        isSaving = true;
+        message = null;
+
+        try
+        {
+            var product = new Product
+            {
+                Name = newProduct.Name.Trim(),
+                Category = newProduct.Category.Trim(),
+                Size = string.IsNullOrWhiteSpace(newProduct.Size) ? null : newProduct.Size.Trim(),
+                Color = string.IsNullOrWhiteSpace(newProduct.Color) ? null : newProduct.Color.Trim(),
+                Price = newProduct.Price,
+                StockQuantity = newProduct.StockQuantity,
+                ReorderLevel = newProduct.ReorderLevel
+            };
+
+            Db.Products.Add(product);
+            await Db.SaveChangesAsync();
+
+            await LoadProducts();
+            newProduct = new ProductFormModel();
+            ClearFilters();
+            message = "Product added successfully!";
+        }
+        catch (Exception)
+        {
+            message = "Unable to save the product. Please try again.";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private sealed class ProductFormModel
+    {
+        [Required(ErrorMessage = "Product name is required.")]
+        [StringLength(100)]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Please select a category.")]
+        [StringLength(50)]
+        public string Category { get; set; } = string.Empty;
+
+        [StringLength(20)]
+        public string? Size { get; set; }
+
+        [StringLength(30)]
+        public string? Color { get; set; }
+
+        [Range(typeof(decimal), "0.01", "999999999",
+            ErrorMessage = "Price must be greater than zero.")]
+        public decimal Price { get; set; }
+
+        [Range(0, int.MaxValue,
+            ErrorMessage = "Stock quantity cannot be negative.")]
+        public int StockQuantity { get; set; }
+
+        [Range(0, int.MaxValue,
+            ErrorMessage = "Reorder level cannot be negative.")]
+        public int ReorderLevel { get; set; } = 5;
+    }
+
+    private void StartEdit(Product product)
+    {
+        editingProduct = new Product
+        {
+            Id = product.Id,
+            Name = product.Name,
+            Category = product.Category,
+            Size = product.Size,
+            Color = product.Color,
+            Price = product.Price,
+            StockQuantity = product.StockQuantity,
+            ReorderLevel = product.ReorderLevel
+        };
+    }
+
+    private void CancelEdit()
+    {
+        editingProduct = null;
+    }
+
+    private async Task UpdateProduct()
+    {
+        if (editingProduct == null || isSaving)
+            return;
+
+        isSaving = true;
+        message = null;
+
+        try
+        {
+            var product = await Db.Products
+                .FirstOrDefaultAsync(p => p.Id == editingProduct.Id);
+
+            if (product == null)
+            {
+                message = "Product not found. Refresh the page and try again.";
+                return;
+            }
+
+            product.Name = editingProduct.Name.Trim();
+            product.Category = editingProduct.Category.Trim();
+            product.Size = string.IsNullOrWhiteSpace(editingProduct.Size)
+                ? null : editingProduct.Size.Trim();
+            product.Color = string.IsNullOrWhiteSpace(editingProduct.Color)
+                ? null : editingProduct.Color.Trim();
+            product.Price = editingProduct.Price;
+            product.StockQuantity = editingProduct.StockQuantity;
+            product.ReorderLevel = editingProduct.ReorderLevel;
+
+            await Db.SaveChangesAsync();
+            await LoadProducts();
+
+            editingProduct = null;
+            message = "Product updated successfully!";
+        }
+        catch (Exception)
+        {
+            message = "Unable to update the product. Please try again.";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DeleteProduct(Product product)
+    {
+        if (isSaving)
+            return;
+
+        var confirmed = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"Are you sure you want to delete '{product.Name}'?");
+
+        if (!confirmed)
+            return;
+
+        isSaving = true;
+        message = null;
+
+        try
+        {
+            var existingProduct = await Db.Products
+                .FirstOrDefaultAsync(p => p.Id == product.Id);
+
+            if (existingProduct == null)
+            {
+                message = "Product not found.";
+                await LoadProducts();
+                return;
+            }
+
+            Db.Products.Remove(existingProduct);
+            await Db.SaveChangesAsync();
+
+            if (editingProduct?.Id == product.Id)
+                editingProduct = null;
+
+            await LoadProducts();
+            message = "Product deleted successfully!";
+        }
+        catch (DbUpdateException)
+        {
+            message = "This product may be linked to a sale and cannot be deleted.";
+        }
+        catch (Exception)
+        {
+            message = "Unable to delete the product. Please try again.";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

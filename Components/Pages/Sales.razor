@@ -1,0 +1,322 @@
+@page "/sales"
+@using Microsoft.EntityFrameworkCore
+@using ThreadLine.Data
+@using ThreadLine.Models
+@inject ApplicationDbContext Db
+
+<PageTitle>Sales and Checkout - ThreadLine</PageTitle>
+
+<h1>Sales and Checkout</h1>
+<p class="text-muted">Create a sale, add clothing items, and update inventory after checkout.</p>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="alert @(isError ? "alert-danger" : "alert-success")" role="alert">@message</div>
+}
+
+@if (isLoading)
+{
+    <p>Loading products...</p>
+}
+else
+{
+    <div class="card mb-4">
+        <div class="card-header"><h5 class="mb-0">Add Items to Sale</h5></div>
+        <div class="card-body">
+            @if (availableProducts.Count == 0)
+            {
+                <p class="mb-0">There are no products in stock. Add products or update stock on the Product Management page first.</p>
+            }
+            else
+            {
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-7">
+                        <label class="form-label" for="productSelect">Product</label>
+                        <select id="productSelect" class="form-select" @bind="selectedProductId">
+                            <option value="0">-- Select a product --</option>
+                            @foreach (var product in availableProducts)
+                            {
+                                <option value="@product.Id">@product.Name — @product.Category — @product.Price.ToString("C", nigeriaCulture) (Stock: @product.StockQuantity)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" for="quantity">Quantity</label>
+                        <input id="quantity" type="number" class="form-control" @bind="quantityToAdd" min="1" />
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-primary w-100" @onclick="AddToCart">Add to Sale</button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header"><h5 class="mb-0">Current Sale</h5></div>
+        <div class="card-body">
+            @if (cart.Count == 0)
+            {
+                <p class="mb-0">No items added yet. Select a product above to begin.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th class="text-end">Unit Price</th>
+                                <th style="min-width: 110px;">Quantity</th>
+                                <th class="text-end">Subtotal</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var line in cart)
+                            {
+                                <tr @key="line.ProductId">
+                                    <td>@line.Name</td>
+                                    <td class="text-end">@line.UnitPrice.ToString("C", nigeriaCulture)</td>
+                                    <td>
+                                        <input type="number" class="form-control" @bind="line.Quantity" min="1" />
+                                        <small class="text-muted">Available: @line.AvailableStock</small>
+                                    </td>
+                                    <td class="text-end">@((line.UnitPrice * line.Quantity).ToString("C", nigeriaCulture))</td>
+                                    <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveFromCart(line.ProductId)">Remove</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="3" class="text-end">Total</th>
+                                <th class="text-end">@CartTotal.ToString("C", nigeriaCulture)</th>
+                                <th></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                <div class="d-flex flex-wrap gap-2 justify-content-end">
+                    <button type="button" class="btn btn-outline-secondary" @onclick="ClearCart" disabled="@isSaving">Clear Sale</button>
+                    <button type="button" class="btn btn-success" @onclick="CompleteSale" disabled="@isSaving">@(isSaving ? "Processing..." : "Complete Checkout")</button>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private List<Product> availableProducts = new();
+    private List<CartLine> cart = new();
+    private int selectedProductId;
+    private int quantityToAdd = 1;
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool isError;
+    private string message = string.Empty;
+    private readonly System.Globalization.CultureInfo nigeriaCulture = System.Globalization.CultureInfo.GetCultureInfo("en-NG");
+
+    private decimal CartTotal => cart.Sum(item => item.UnitPrice * item.Quantity);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProducts();
+    }
+
+    private async Task LoadProducts()
+    {
+        isLoading = true;
+        try
+        {
+            availableProducts = await Db.Products
+                .Where(product => product.StockQuantity > 0)
+                .OrderBy(product => product.Name)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            SetMessage($"Could not load products: {ex.Message}", true);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void AddToCart()
+    {
+        ClearMessage();
+
+        if (selectedProductId <= 0)
+        {
+            SetMessage("Please select a product.", true);
+            return;
+        }
+
+        if (quantityToAdd < 1)
+        {
+            SetMessage("Quantity must be at least 1.", true);
+            return;
+        }
+
+        var product = availableProducts.FirstOrDefault(item => item.Id == selectedProductId);
+        if (product is null)
+        {
+            SetMessage("That product is unavailable. Refresh and try again.", true);
+            return;
+        }
+
+        var existingLine = cart.FirstOrDefault(item => item.ProductId == product.Id);
+        var requestedTotal = quantityToAdd + (existingLine?.Quantity ?? 0);
+        if (requestedTotal > product.StockQuantity)
+        {
+            SetMessage($"Only {product.StockQuantity} unit(s) of {product.Name} are currently in stock.", true);
+            return;
+        }
+
+        if (existingLine is null)
+        {
+            cart.Add(new CartLine
+            {
+                ProductId = product.Id,
+                Name = product.Name,
+                UnitPrice = product.Price,
+                Quantity = quantityToAdd,
+                AvailableStock = product.StockQuantity
+            });
+        }
+        else
+        {
+            existingLine.Quantity = requestedTotal;
+        }
+
+        quantityToAdd = 1;
+        SetMessage($"{product.Name} added to the sale.", false);
+    }
+
+    private void RemoveFromCart(int productId)
+    {
+        cart.RemoveAll(item => item.ProductId == productId);
+        ClearMessage();
+    }
+
+    private void ClearCart()
+    {
+        cart.Clear();
+        ClearMessage();
+    }
+
+    private async Task CompleteSale()
+    {
+        ClearMessage();
+        if (cart.Count == 0)
+        {
+            SetMessage("Add at least one product before checkout.", true);
+            return;
+        }
+
+        if (cart.Any(item => item.Quantity < 1))
+        {
+            SetMessage("Each item quantity must be at least 1.", true);
+            return;
+        }
+
+        isSaving = true;
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction = null;
+        try
+        {
+            transaction = await Db.Database.BeginTransactionAsync();
+            var productIds = cart.Select(item => item.ProductId).ToList();
+            var currentProducts = await Db.Products
+                .Where(product => productIds.Contains(product.Id))
+                .ToDictionaryAsync(product => product.Id);
+
+            foreach (var line in cart)
+            {
+                if (!currentProducts.TryGetValue(line.ProductId, out var product))
+                {
+                    SetMessage($"{line.Name} no longer exists. Please review the sale.", true);
+                    await transaction.RollbackAsync();
+                    return;
+                }
+
+                if (line.Quantity > product.StockQuantity)
+                {
+                    SetMessage($"Insufficient stock for {product.Name}. Available now: {product.StockQuantity}.", true);
+                    await transaction.RollbackAsync();
+                    await LoadProducts();
+                    return;
+                }
+            }
+
+            var sale = new Sale
+            {
+                SaleDate = DateTime.Now,
+                TotalAmount = cart.Sum(item => item.UnitPrice * item.Quantity)
+            };
+
+            Db.Sales.Add(sale);
+            await Db.SaveChangesAsync();
+
+            foreach (var line in cart)
+            {
+                var product = currentProducts[line.ProductId];
+                Db.SaleItems.Add(new SaleItem
+                {
+                    SaleId = sale.Id,
+                    ProductId = product.Id,
+                    Quantity = line.Quantity,
+                    UnitPrice = line.UnitPrice
+                });
+                product.StockQuantity -= line.Quantity;
+            }
+
+            await Db.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            var completedTotal = sale.TotalAmount;
+            cart.Clear();
+            selectedProductId = 0;
+            quantityToAdd = 1;
+            await LoadProducts();
+            SetMessage($"Sale #{sale.Id} completed successfully. Total: {completedTotal.ToString("C", nigeriaCulture)}. Inventory has been updated.", false);
+        }
+        catch (Exception ex)
+        {
+            if (transaction is not null)
+            {
+                await transaction.RollbackAsync();
+            }
+            SetMessage($"Checkout failed. No sale was confirmed. Details: {ex.Message}", true);
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync();
+            }
+            isSaving = false;
+        }
+    }
+
+    private void SetMessage(string text, bool error)
+    {
+        message = text;
+        isError = error;
+    }
+
+    private void ClearMessage()
+    {
+        message = string.Empty;
+        isError = false;
+    }
+
+    private sealed class CartLine
+    {
+        public int ProductId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public decimal UnitPrice { get; set; }
+        public int Quantity { get; set; } = 1;
+        public int AvailableStock { get; set; }
+    }
+}
