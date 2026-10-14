@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="ThreadLine.csproj" />
+  <Project Path="ThreadLine.Tests/ThreadLine.Tests.csproj" />
+</Solution>

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using ThreadLine.Components;
 using ThreadLine.Components.Account;
 using ThreadLine.Data;
+using ThreadLine.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -30,17 +31,22 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
-    {
-        options.SignIn.RequireConfirmedAccount = true;
-        options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
-    })
-    .AddEntityFrameworkStores<ApplicationDbContext>()
-    .AddSignInManager()
-    .AddDefaultTokenProviders();
+{
+    options.SignIn.RequireConfirmedAccount = true;
+    options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
+})
+.AddRoles<IdentityRole>()
+.AddEntityFrameworkStores<ApplicationDbContext>()
+.AddSignInManager()
+.AddDefaultTokenProviders();
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
+builder.Services.AddScoped<TaxCalculator>();
+builder.Services.AddScoped<InventoryService>();
+
 var app = builder.Build();
+await IdentitySeeder.SeedAsync(app.Services);
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
