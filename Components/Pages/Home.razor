@@ -1,4 +1,6 @@
-﻿@page "/"
+﻿@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize(Roles = "Admin")]
+@page "/"
 @using Microsoft.EntityFrameworkCore
 @using System.Globalization
 @using ThreadLine.Data
