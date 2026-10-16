@@ -34,12 +34,6 @@ public static class IdentitySeeder
 
         var email = Environment.GetEnvironmentVariable("THREADLINE_ADMIN_EMAIL");
 
-        Console.WriteLine(
-            admin is null
-                ? "[Seeder] Admin not found, creating it"
-                : "[Seeder] Admin already exists"
-        );
-
         var password = Environment.GetEnvironmentVariable("THREADLINE_ADMIN_PASSWORD");
 
         Console.WriteLine(
@@ -53,6 +47,12 @@ public static class IdentitySeeder
         }
 
         var admin = await userManager.FindByEmailAsync(email);
+
+        Console.WriteLine(
+            admin is null
+                ? "[Seeder] Admin not found, creating it"
+                : "[Seeder] Admin already exists"
+        );
 
         if (admin is null)
         {
