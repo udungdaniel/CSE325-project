@@ -1,8 +1,11 @@
-﻿@using Microsoft.AspNetCore.Authorization
+﻿@page "/"
+@rendermode InteractiveServer
+@using Microsoft.AspNetCore.Authorization
 @attribute [Authorize(Roles = "Admin")]
-@page "/"
+@using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.EntityFrameworkCore
 @using System.Globalization
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
 @using ThreadLine.Data
 @using ThreadLine.Models
 @inject ApplicationDbContext Db
@@ -11,6 +14,23 @@
 
 <h1 class="mb-1">Dashboard</h1>
 <p class="text-muted mb-4">Sales performance and inventory overview.</p>
+
+<AuthorizeView>
+    <div class="alert alert-primary d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4" role="alert">
+        <div>
+            Logged in as <strong>@(context.User.Identity?.Name ?? "unknown")</strong>
+            @if (context.User.IsInRole("Admin"))
+            {
+                <span class="badge bg-dark ms-1">Admin</span>
+            }
+        </div>
+        <form action="Account/Logout" method="post" class="m-0">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="" />
+            <button type="submit" class="btn btn-sm btn-outline-primary">Log out</button>
+        </form>
+    </div>
+</AuthorizeView>
 
 @if (!string.IsNullOrWhiteSpace(errorMessage))
 {
@@ -57,9 +77,106 @@ else
                 <div class="card-body">
                     <div class="text-muted small">Products in Inventory</div>
                     <div class="fs-4 fw-bold">@totalProducts</div>
-                    <div class="small text-muted">@lowStockCount low/out-of-stock item(s)</div>
+                    <div class="small text-muted">@totalUnitsInStock unit(s) available · @lowStockCount low/out-of-stock</div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Available Stock</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 mb-1">
+                <div class="col-md-4">
+                    <label class="form-label">Search Products</label>
+                    <input class="form-control"
+                           type="search"
+                           placeholder="Search by product name..."
+                           @bind="searchTerm"
+                           @bind:event="oninput" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Filter by Category</label>
+                    <select class="form-select" @bind="selectedCategory">
+                        <option value="">All Categories</option>
+                        @foreach (var category in AvailableCategories)
+                        {
+                            <option value="@category">@category</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Filter by Stock Status</label>
+                    <select class="form-select" @bind="selectedStockStatus">
+                        <option value="">All Stock Statuses</option>
+                        <option value="InStock">In Stock</option>
+                        <option value="LowStock">Low Stock</option>
+                        <option value="OutOfStock">Out of Stock</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm mt-2 mb-3" @onclick="ClearStockFilters">
+                Clear Filters
+            </button>
+
+            @if (allProducts.Count == 0)
+            {
+                <div class="alert alert-secondary mb-0">
+                    No products in inventory yet. Add products on the Product Management page.
+                </div>
+            }
+            else if (FilteredAvailableProducts.Count == 0)
+            {
+                <div class="alert alert-secondary mb-0">
+                    No products match your search or filters.
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Category</th>
+                                <th>Price</th>
+                                <th>Available Stock</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var product in FilteredAvailableProducts)
+                            {
+                                <tr @key="product.Id">
+                                    <td class="fw-semibold">@product.Name</td>
+                                    <td>@product.Category</td>
+                                    <td>@FormatMoney(product.Price)</td>
+                                    <td>@product.StockQuantity</td>
+                                    <td>
+                                        @if (product.StockQuantity == 0)
+                                        {
+                                            <span class="badge bg-danger">Out of stock</span>
+                                        }
+                                        else if (product.StockQuantity <= product.ReorderLevel)
+                                        {
+                                            <span class="badge bg-warning text-dark">Low stock</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success">In stock</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="text-muted small">
+                    Showing @FilteredAvailableProducts.Count of @allProducts.Count product(s).
+                </div>
+            }
         </div>
     </div>
 
@@ -154,10 +271,50 @@ else
     private int weekTransactions;
     private int monthTransactions;
     private int totalProducts;
+    private int totalUnitsInStock;
     private int lowStockCount;
+    private List<Product> allProducts = new();
     private List<LowStockItem> lowStockItems = new();
 
+    private string searchTerm = string.Empty;
+    private string selectedCategory = string.Empty;
+    private string selectedStockStatus = string.Empty;
+
     private readonly CultureInfo nigeriaCulture = CultureInfo.GetCultureInfo("en-NG");
+
+    private List<string> AvailableCategories =>
+        allProducts
+            .Select(p => p.Category)
+            .Distinct()
+            .OrderBy(c => c)
+            .ToList();
+
+    private List<Product> FilteredAvailableProducts =>
+        allProducts
+            .Where(p =>
+                string.IsNullOrWhiteSpace(searchTerm) ||
+                p.Name.Contains(searchTerm.Trim(), StringComparison.OrdinalIgnoreCase))
+            .Where(p =>
+                string.IsNullOrWhiteSpace(selectedCategory) ||
+                p.Category == selectedCategory)
+            .Where(p =>
+                selectedStockStatus switch
+                {
+                    "InStock" => p.StockQuantity > p.ReorderLevel,
+                    "LowStock" => p.StockQuantity > 0 &&
+                                  p.StockQuantity <= p.ReorderLevel,
+                    "OutOfStock" => p.StockQuantity == 0,
+                    _ => true
+                })
+            .OrderBy(p => p.Name)
+            .ToList();
+
+    private void ClearStockFilters()
+    {
+        searchTerm = string.Empty;
+        selectedCategory = string.Empty;
+        selectedStockStatus = string.Empty;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -185,7 +342,9 @@ else
             monthTransactions = await Db.Sales.CountAsync(s => s.SaleDate >= monthStart && s.SaleDate < today.AddDays(1));
 
             var products = await Db.Products.AsNoTracking().OrderBy(p => p.Name).ToListAsync();
+            allProducts = products;
             totalProducts = products.Count;
+            totalUnitsInStock = products.Sum(p => p.StockQuantity);
 
             var lookbackStart = today.AddDays(-SalesLookbackDays);
             var soldQuantities = await (

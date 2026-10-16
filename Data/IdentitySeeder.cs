@@ -8,51 +8,53 @@ public static class IdentitySeeder
     {
         using var scope = services.CreateScope();
 
-        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var roleManager = scope.ServiceProvider
+            .GetRequiredService<RoleManager<IdentityRole>>();
 
-        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var userManager = scope.ServiceProvider
+            .GetRequiredService<UserManager<ApplicationUser>>();
 
-        string[] roles = { "Admin", "Employee" };
+        const string adminRole = "Admin";
+        const string staffRole = "Staff";
 
-        foreach (var role in roles)
+        // Ensure both roles exist.
+        foreach (var roleName in new[] { adminRole, staffRole })
         {
-            if (!await roleManager.RoleExistsAsync(role))
+            if (!await roleManager.RoleExistsAsync(roleName))
             {
-                var roleResult = await roleManager.CreateAsync(new IdentityRole(role));
+                var roleResult = await roleManager.CreateAsync(
+                    new IdentityRole(roleName));
 
                 if (!roleResult.Succeeded)
                 {
                     throw new InvalidOperationException(
-                        $"Could not create the {role} role: "
-                            + string.Join("; ", roleResult.Errors.Select(e => e.Description))
-                    );
+                        $"Could not create the {roleName} role: " +
+                        string.Join("; ", roleResult.Errors.Select(e => e.Description)));
                 }
             }
         }
 
-        const string adminRole = "Admin";
+        await SeedAdminAsync(userManager, adminRole);
+        await SeedStaffAsync(userManager, staffRole);
+    }
 
-        var email = Environment.GetEnvironmentVariable("THREADLINE_ADMIN_EMAIL");
+    private static async Task SeedAdminAsync(
+        UserManager<ApplicationUser> userManager, string adminRole)
+    {
+        var email = Environment.GetEnvironmentVariable(
+            "THREADLINE_ADMIN_EMAIL");
 
-        var password = Environment.GetEnvironmentVariable("THREADLINE_ADMIN_PASSWORD");
-
-        Console.WriteLine(
-            $"[Seeder] email set: {!string.IsNullOrWhiteSpace(email)}, password set: {!string.IsNullOrWhiteSpace(password)}"
-        );
+        var password = Environment.GetEnvironmentVariable(
+            "THREADLINE_ADMIN_PASSWORD");
 
         // Create an administrator account only when credentials are configured.
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        if (string.IsNullOrWhiteSpace(email) ||
+            string.IsNullOrWhiteSpace(password))
         {
             return;
         }
 
         var admin = await userManager.FindByEmailAsync(email);
-
-        Console.WriteLine(
-            admin is null
-                ? "[Seeder] Admin not found, creating it"
-                : "[Seeder] Admin already exists"
-        );
 
         if (admin is null)
         {
@@ -60,34 +62,88 @@ public static class IdentitySeeder
             {
                 UserName = email,
                 Email = email,
-                EmailConfirmed = true,
+                EmailConfirmed = true
             };
 
-            var createResult = await userManager.CreateAsync(admin, password);
-
-            Console.WriteLine("[Seeder] Admin created");
+            var createResult = await userManager.CreateAsync(
+                admin, password);
 
             if (!createResult.Succeeded)
             {
                 throw new InvalidOperationException(
-                    "Could not create the administrator account: "
-                        + string.Join("; ", createResult.Errors.Select(e => e.Description))
-                );
+                    "Could not create the administrator account: " +
+                    string.Join("; ", createResult.Errors.Select(e => e.Description)));
             }
         }
 
         if (!await userManager.IsInRoleAsync(admin, adminRole))
         {
-            var addRoleResult = await userManager.AddToRoleAsync(admin, adminRole);
+            var addRoleResult = await userManager.AddToRoleAsync(
+                admin, adminRole);
 
             if (!addRoleResult.Succeeded)
             {
                 throw new InvalidOperationException(
-                    "Could not assign the Admin role: "
-                        + string.Join("; ", addRoleResult.Errors.Select(e => e.Description))
-                );
+                    "Could not assign the Admin role: " +
+                    string.Join("; ", addRoleResult.Errors.Select(e => e.Description)));
             }
         }
-        Console.WriteLine("[Seeder] Admin role assigned");
+    }
+
+    private static async Task SeedStaffAsync(
+        UserManager<ApplicationUser> userManager, string staffRole)
+    {
+        // Staff account is always created so non-admin login can be demoed.
+        // Override via environment variables if desired.
+        var email = Environment.GetEnvironmentVariable(
+            "THREADLINE_STAFF_EMAIL");
+
+        var password = Environment.GetEnvironmentVariable(
+            "THREADLINE_STAFF_PASSWORD");
+
+        email = string.IsNullOrWhiteSpace(email)
+            ? "staff@threadline.com"
+            : email;
+
+        password = string.IsNullOrWhiteSpace(password)
+            ? "Staff@123"
+            : password;
+
+        var staff = await userManager.FindByEmailAsync(email);
+
+        if (staff is null)
+        {
+            staff = new ApplicationUser
+            {
+                UserName = email,
+                Email = email,
+                // REQUIRED: RequireConfirmedAccount = true means an
+                // unconfirmed email can never sign in.
+                EmailConfirmed = true
+            };
+
+            var createResult = await userManager.CreateAsync(
+                staff, password);
+
+            if (!createResult.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    "Could not create the staff account: " +
+                    string.Join("; ", createResult.Errors.Select(e => e.Description)));
+            }
+        }
+
+        if (!await userManager.IsInRoleAsync(staff, staffRole))
+        {
+            var addRoleResult = await userManager.AddToRoleAsync(
+                staff, staffRole);
+
+            if (!addRoleResult.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    "Could not assign the Staff role: " +
+                    string.Join("; ", addRoleResult.Errors.Select(e => e.Description)));
+            }
+        }
     }
 }
