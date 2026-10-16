@@ -34,7 +34,17 @@ public static class IdentitySeeder
 
         var email = Environment.GetEnvironmentVariable("THREADLINE_ADMIN_EMAIL");
 
+        Console.WriteLine(
+            admin is null
+                ? "[Seeder] Admin not found, creating it"
+                : "[Seeder] Admin already exists"
+        );
+
         var password = Environment.GetEnvironmentVariable("THREADLINE_ADMIN_PASSWORD");
+
+        Console.WriteLine(
+            $"[Seeder] email set: {!string.IsNullOrWhiteSpace(email)}, password set: {!string.IsNullOrWhiteSpace(password)}"
+        );
 
         // Create an administrator account only when credentials are configured.
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
@@ -54,6 +64,8 @@ public static class IdentitySeeder
             };
 
             var createResult = await userManager.CreateAsync(admin, password);
+
+            Console.WriteLine("[Seeder] Admin created");
 
             if (!createResult.Succeeded)
             {
@@ -76,5 +88,6 @@ public static class IdentitySeeder
                 );
             }
         }
+        Console.WriteLine("[Seeder] Admin role assigned");
     }
 }
