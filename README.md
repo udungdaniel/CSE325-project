@@ -82,7 +82,7 @@ dotnet test
 | Role     | What they can do |
 |----------|------------------|
 | Admin    | Manage products (add, edit, delete), process sales, view stock |
-| Employee | Process sales and view stock |
+| Employee | Process sales and view dashboard |
 
 New accounts created through the Register page are given the Employee role. The admin account is created by the seeder when the app starts.
 
